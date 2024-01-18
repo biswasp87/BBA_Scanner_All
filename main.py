@@ -159,11 +159,12 @@ def scanner(request):
             data.loc[data.index[row_index], 'R_DIST'] = df_stock["R_DIST"].iloc[-1]
             data.loc[data.index[row_index], 'S_DIST'] = df_stock["S_DIST"].iloc[-1]
             row_index = row_index + 1
+            print(item)
         except Exception:
             pass
 
-    print(data)
-    data.to_csv("scanner.csv")
+    # print(data)
+    # data.to_csv("scanner.csv")
     try:
         client_storage = storage.Client()
         bucket = client_storage.bucket('biswasp87')
