@@ -11,8 +11,8 @@ def scanner(request):
                                  'P_POS'])
     FNO_WL = pd.read_csv("gs://bba_support_files/WL_FNO.csv")
     row_index = 0
-    data['SYMBOL'] = FNO_WL['Symbol'].values
-    # data['SYMBOL'] = ["TATAMOTORS", "AARTIIND"]
+    # data['SYMBOL'] = FNO_WL['Symbol'].values
+    data['SYMBOL'] = ["TATAMOTORS", "AARTIIND", "ITC"]
 
     for item in data["SYMBOL"]:
         try:
@@ -221,6 +221,7 @@ def scanner(request):
     # _________________________________________________________________________________
     # UPLOAD DATA TO BIG QUERY
     # _________________________________________________________________________________
+    data.astype(str)
     client = bigquery.Client()
     try:
         table_id = "phrasal-fire-373510.Scanner_Data.FNO_Scanner"
@@ -229,11 +230,28 @@ def scanner(request):
         job_config = bigquery.LoadJobConfig(
             # Specify a (partial) schema. All columns are always written to the
             # table. The schema is used to assist in data type definitions.
-            # schema=[
+            schema=[
 
-            #     bigquery.SchemaField("TIMESTAMP", "DATE", mode="REQUIRED"),
-            #     bigquery.SchemaField("EXPIRY_DT", "DATE", mode="REQUIRED"),
-            # ],
+                bigquery.SchemaField("SYMBOL", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("NR4", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("NR7", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("BUL_REV", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("CONSOLIDATION", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("PRICE", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("VOLUME", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("DEL", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("DEL_PER", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("QT", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("COI", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("PCR_T", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("PCR_VAL", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("10M_CE", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("10M_CE_LTD", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("10M_PE", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("10M_PE_LTD", "STRING", mode="NULLABLE"),
+                bigquery.SchemaField("P_POS", "STRING", mode="NULLABLE"),
+
+            ],
             write_disposition=project,)
         try:
             client.get_table(table_id)  # Make an API request.
