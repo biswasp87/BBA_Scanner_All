@@ -225,8 +225,8 @@ def scanner(request):
     client = bigquery.Client()
     try:
         table_id = "phrasal-fire-373510.Scanner_Data.FNO_Scanner"
-        # project = "WRITE_APPEND"
-        project = "WRITE_TRUNCATE"
+        project = "WRITE_APPEND"
+        # project = "WRITE_TRUNCATE"
         job_config = bigquery.LoadJobConfig(
             # Specify a (partial) schema. All columns are always written to the
             # table. The schema is used to assist in data type definitions.
