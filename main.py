@@ -209,8 +209,8 @@ def scanner(request):
         except Exception:
             pass
 
-    print(data)
-    data.to_csv("scanner.csv")
+    # print(data)
+    # data.to_csv("scanner.csv")
     # try:
     #     client_storage = storage.Client()
     #     bucket = client_storage.bucket('biswasp87')
@@ -230,10 +230,11 @@ def scanner(request):
             # Specify a (partial) schema. All columns are always written to the
             # table. The schema is used to assist in data type definitions.
             # schema=[
+
             #     bigquery.SchemaField("TIMESTAMP", "DATE", mode="REQUIRED"),
             #     bigquery.SchemaField("EXPIRY_DT", "DATE", mode="REQUIRED"),
             # ],
-            write_disposition=project, )
+            write_disposition=project,)
         try:
             client.get_table(table_id)  # Make an API request.
             print("Table {} already exists.".format(table_id))
