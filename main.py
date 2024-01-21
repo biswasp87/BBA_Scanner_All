@@ -3,16 +3,20 @@ def scanner(request):
     import pandas as pd
     from google.cloud import storage
     from google.cloud import bigquery
+    from google.cloud.exceptions import NotFound
 
     data = pd.DataFrame(columns=['SYMBOL', 'NR4', 'NR7', 'BUL_REV', 'CONSOLIDATION', 'PRICE', 'VOLUME', 'DEL',
-                                 'DEL_PER', 'QT', 'COI', 'PCR_T', 'PCR_VAL', '10M_CE', '10M_PE',
-                                 'R_DIST', 'S_DIST'])
+                                 'DEL_PER', 'QT', 'COI', 'PCR_T', 'PCR_VAL', '10M_CE', '10M_CE_LTD', '10M_PE',
+                                 '10M_PE_LTD',
+                                 'P_POS'])
     FNO_WL = pd.read_csv("gs://bba_support_files/WL_FNO.csv")
     row_index = 0
     data['SYMBOL'] = FNO_WL['Symbol'].values
+    # data['SYMBOL'] = ["TATAMOTORS", "AARTIIND"]
 
     for item in data["SYMBOL"]:
         try:
+            print(item)
             dropdown_value = item
             dropdown_n_days_value = 30
             short_sma = 2
@@ -41,7 +45,10 @@ def scanner(request):
             df_stock = df_stock.sort_values(by='TIMESTAMP', ascending=True)
             df_stock["BAR"] = df_stock["BAR"].astype(int)
             df_stock = df_stock.reset_index()
+            df_stock["CUR_CE_STRIKE_PR_10MVOL"] = df_stock["CUR_CE_STRIKE_PR_10MVOL"].astype(str)
+            df_stock["CUR_PE_STRIKE_PR_10MVOL"] = df_stock["CUR_PE_STRIKE_PR_10MVOL"].astype(str)
             df_stock.to_csv("Sample_Data.csv")
+            # print(df_stock)
 
             # NR4 INDICATOR___________________________________________________________
             df_stock["ROLL_MAX_4"] = df_stock["EQ_HIGH_PRICE"].rolling(4).max()
@@ -56,25 +63,35 @@ def scanner(request):
                                        (df_stock["EQ_LOW_PRICE"].iloc[-7] == df_stock["ROLL_MIN_7"].iloc[-1]), 'Y', '')
 
             # BULLISH REVERSAL INDICATOR___________________________________________________________
-            df_stock["BR_CNDL_1"] = np.where((df_stock["EQ_CLOSE_PRICE"].iloc[-3] < df_stock["EQ_OPEN_PRICE"].iloc[-3]), 'YES', 'NO')
+            df_stock["BR_CNDL_1"] = np.where((df_stock["EQ_CLOSE_PRICE"].iloc[-3] < df_stock["EQ_OPEN_PRICE"].iloc[-3]),
+                                             'YES', 'NO')
             df_stock["BR_CNDL_2"] = np.where((df_stock["EQ_OPEN_PRICE"].iloc[-2] > df_stock["EQ_LOW_PRICE"].iloc[-2]) & \
-                           (df_stock["EQ_CLOSE_PRICE"].iloc[-2] > df_stock["EQ_OPEN_PRICE"].iloc[-2]) & \
-                           (df_stock["EQ_HIGH_PRICE"].iloc[-2] >= df_stock["EQ_CLOSE_PRICE"].iloc[-2]) & \
-                           ((df_stock["EQ_HIGH_PRICE"].iloc[-2] - df_stock["EQ_CLOSE_PRICE"].iloc[-2]) < ((df_stock["EQ_CLOSE_PRICE"].iloc[-2] - df_stock["EQ_OPEN_PRICE"].iloc[-2]))) & \
-                           ((df_stock["EQ_OPEN_PRICE"].iloc[-2] - df_stock["EQ_LOW_PRICE"].iloc[-2]) >= (3*(df_stock["EQ_CLOSE_PRICE"].iloc[-2] - df_stock["EQ_OPEN_PRICE"].iloc[-2]))),'YES', 'NO')
-            df_stock["BR_CNDL_4"] = np.where((df_stock["EQ_CLOSE_PRICE"].iloc[-1] > df_stock["EQ_OPEN_PRICE"].iloc[-1]) &
-                                             (df_stock["EQ_CLOSE_PRICE"].iloc[-1] > df_stock["EQ_HIGH_PRICE"].iloc[-3]), 'YES',
-                                             'NO')
-            df_stock["BUL_REV"] = np.where(((df_stock["BR_CNDL_1"] == 'YES') & (df_stock["BR_CNDL_2"] == 'YES') & (df_stock["BR_CNDL_4"] == 'YES')), 'Y', '')
+                                             (df_stock["EQ_CLOSE_PRICE"].iloc[-2] > df_stock["EQ_OPEN_PRICE"].iloc[
+                                                 -2]) & \
+                                             (df_stock["EQ_HIGH_PRICE"].iloc[-2] >= df_stock["EQ_CLOSE_PRICE"].iloc[
+                                                 -2]) & \
+                                             ((df_stock["EQ_HIGH_PRICE"].iloc[-2] - df_stock["EQ_CLOSE_PRICE"].iloc[
+                                                 -2]) < ((df_stock["EQ_CLOSE_PRICE"].iloc[-2] -
+                                                          df_stock["EQ_OPEN_PRICE"].iloc[-2]))) & \
+                                             ((df_stock["EQ_OPEN_PRICE"].iloc[-2] - df_stock["EQ_LOW_PRICE"].iloc[
+                                                 -2]) >= (3 * (df_stock["EQ_CLOSE_PRICE"].iloc[-2] -
+                                                               df_stock["EQ_OPEN_PRICE"].iloc[-2]))), 'YES', 'NO')
+            df_stock["BR_CNDL_4"] = np.where(
+                (df_stock["EQ_CLOSE_PRICE"].iloc[-1] > df_stock["EQ_OPEN_PRICE"].iloc[-1]) &
+                (df_stock["EQ_CLOSE_PRICE"].iloc[-1] > df_stock["EQ_HIGH_PRICE"].iloc[-3]), 'YES',
+                'NO')
+            df_stock["BUL_REV"] = np.where(((df_stock["BR_CNDL_1"] == 'YES') & (df_stock["BR_CNDL_2"] == 'YES') & (
+                        df_stock["BR_CNDL_4"] == 'YES')), 'Y', '')
 
             # BEARISH REVERSAL INDICATOR___________________________________________________________
 
             # CONSOLIDATION PHASE INDICATOR________________________________________________________
             df_stock['SMA'] = df_stock['EQ_CLOSE_PRICE'].rolling(
                 window=long_sma).mean()  # Simple Moving Average calculation (period = 20)
-            df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(window=long_sma).std()  # Standard Deviation calculation
+            df_stock['stdev'] = df_stock['EQ_CLOSE_PRICE'].rolling(
+                window=long_sma).std()  # Standard Deviation calculation
             df_stock['Lower_Bollinger'] = df_stock['SMA'] - (
-                        b_band * df_stock['stdev'])  # Calculation of the lower curve of the Bollinger Bands
+                    b_band * df_stock['stdev'])  # Calculation of the lower curve of the Bollinger Bands
             df_stock['Upper_Bollinger'] = df_stock['SMA'] + (b_band * df_stock['stdev'])  # Upper curve
 
             df_stock['TR'] = abs(df_stock['EQ_HIGH_PRICE'] - df_stock['EQ_LOW_PRICE'])  # True Range calculation
@@ -84,7 +101,8 @@ def scanner(request):
             df_stock['Lower_KC'] = df_stock['SMA'] - (kc * df_stock['ATR'])  # Lower curve
 
             df_stock['consolidation'] = np.where(
-                (df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),
+                (df_stock['Lower_Bollinger'] > df_stock['Lower_KC']) & (
+                            df_stock['Upper_Bollinger'] < df_stock['Upper_KC']),
                 "Y", "")
 
             # PRICE STRENGTH INDICATOR___________________________________________________________
@@ -107,7 +125,8 @@ def scanner(request):
                                          df_stock["EQ_DELIV_QTY"].rolling(short_sma).sum()) * 100).round(1)
             df_stock["DEL_PER_MA_M"] = ((df_stock["EQ_TTL_TRD_QNTY"].rolling(medium_sma).sum() /
                                          df_stock["EQ_DELIV_QTY"].rolling(medium_sma).sum()) * 100).round(1)
-            df_stock["DEL_PER_MA_COL"] = np.where((df_stock["DEL_PER_MA_S"] < df_stock["DEL_PER_MA_M"].shift(2)), 'W', '')
+            df_stock["DEL_PER_MA_COL"] = np.where((df_stock["DEL_PER_MA_S"] < df_stock["DEL_PER_MA_M"].shift(2)), 'W',
+                                                  '')
 
             # Q/T STRENGTH INDICATOR___________________________________________________________
             df_stock["QT_MA_S"] = df_stock["EQ_QT"].rolling(short_sma).mean()
@@ -122,23 +141,48 @@ def scanner(request):
             # PCR STRENGTH INDICATOR___________________________________________________________
             df_stock["CUR_PCR_MA_S"] = df_stock["CUR_PCR"].rolling(short_sma).mean()
             df_stock["CUR_PCR_MA_M"] = df_stock["CUR_PCR"].rolling(medium_sma).mean()
-            df_stock["CUR_PCR_MA_COL"] = np.where((df_stock["CUR_PCR_MA_S"] > df_stock["CUR_PCR_MA_M"].shift(2)), 'S', '')
+            df_stock["CUR_PCR_MA_COL"] = np.where((df_stock["CUR_PCR_MA_S"] > df_stock["CUR_PCR_MA_M"].shift(2)), 'S',
+                                                  '')
 
             # PCR VALUE STRENGTH INDICATOR___________________________________________________________
             df_stock["PCR_MA_COL"] = np.where(df_stock["CUR_PCR"] >= 100, 'S',
-                                              np.where((df_stock["CUR_PCR"] < 100) & (df_stock["CUR_PCR"] > 80), 'N', 'W'))
+                                              np.where((df_stock["CUR_PCR"] < 100) & (df_stock["CUR_PCR"] > 80), 'N',
+                                                       'W'))
 
-            # 10 MILLION OPTION VOLUME (CE) ___________________________________________________________
-            df_stock["10M_CE"] = np.where(df_stock["CUR_CE_STRIKE_PR_10MVOL"] is not None, "Y", '')
+            # 10 MILLION OPTION VOLUME (CE) ___________________________________________________________D)
+            found_10M_CE = df_stock[df_stock['CUR_CE_STRIKE_PR_10MVOL'].str.contains('nan')]
+            if found_10M_CE["CUR_CE_STRIKE_PR_10MVOL"].count() == len(df_stock["CUR_CE_STRIKE_PR_10MVOL"]):
+                CE_value = ""
+            else:
+                CE_value = "Y"
+            # 10 MILLION OPTION VOLUME LTD (CE) ___________________________________________________________
+            df_stock["10M_CE_LTD"] = np.where(df_stock["CUR_CE_STRIKE_PR_10MVOL"] == "nan", "", 'Y')
+
+            # 10 MILLION OPTION VOLUME (PE) ___________________________________________________________D)
+            found_10M_PE = df_stock[df_stock['CUR_PE_STRIKE_PR_10MVOL'].str.contains('nan')]
+            if found_10M_PE["CUR_PE_STRIKE_PR_10MVOL"].count() == len(df_stock["CUR_PE_STRIKE_PR_10MVOL"]):
+                PE_value = ""
+            else:
+                PE_value = "Y"
+
             # 10 MILLION OPTION VOLUME (PE) ___________________________________________________________
-            df_stock["10M_PE"] = np.where(df_stock["CUR_PE_STRIKE_PR_10MVOL"] is not None, "Y", '')
+            df_stock["10M_PE_LTD"] = np.where(df_stock["CUR_PE_STRIKE_PR_10MVOL"] == "nan", "", 'Y')
             # NUMBER OF STRIKE PRICE WITH 10 MILLION OPTION VOLUME (CE) _______________________________
             # NUMBER OF STRIKE PRICE WITH 10 MILLION OPTION VOLUME (PE) _______________________________
 
             # DISTANCE(IN PERCENT) FROM RESISTANCE(MAX CE)___________________________________________________________
-            df_stock["R_DIST"] = ((df_stock["CUR_CE_STRIKE_PR_OIMAX"] - df_stock["EQ_CLOSE_PRICE"])/df_stock["EQ_CLOSE_PRICE"]*100).round(1)
+            df_stock["R_DIST"] = ((df_stock["CUR_CE_STRIKE_PR_OIMAX"] - df_stock["EQ_CLOSE_PRICE"]) / df_stock[
+                "EQ_CLOSE_PRICE"] * 100).round(1)
             # DISTANCE(IN PERCENT) FROM SUPPORT (MAX CE)___________________________________________________________
-            df_stock["S_DIST"] = ((df_stock["EQ_CLOSE_PRICE"] - df_stock["CUR_PE_STRIKE_PR_OIMAX"])/df_stock["EQ_CLOSE_PRICE"]*100).round(1)
+            df_stock["S_DIST"] = ((df_stock["EQ_CLOSE_PRICE"] - df_stock["CUR_PE_STRIKE_PR_OIMAX"]) / df_stock[
+                "EQ_CLOSE_PRICE"] * 100).round(1)
+            df_stock["RANGE"] = df_stock["CUR_CE_STRIKE_PR_OIMAX"] - df_stock["CUR_PE_STRIKE_PR_OIMAX"]
+            df_stock["RANGE_P90"] = df_stock["CUR_CE_STRIKE_PR_OIMAX"] - (.1 * df_stock["RANGE"])
+            df_stock["RANGE_P10"] = df_stock["CUR_PE_STRIKE_PR_OIMAX"] + (.1 * df_stock["RANGE"])
+            df_stock["P_POS"] = np.where(((df_stock["EQ_CLOSE_PRICE"] > df_stock["CUR_PE_STRIKE_PR_OIMAX"]) &
+                                          (df_stock["EQ_CLOSE_PRICE"] < df_stock["RANGE_P10"])), "N SUP",
+                                         np.where(((df_stock["EQ_CLOSE_PRICE"] < df_stock["CUR_CE_STRIKE_PR_OIMAX"]) &
+                                                   (df_stock["EQ_CLOSE_PRICE"] > df_stock["RANGE_P90"])), "N RES", ""))
 
             # Insert Scanned Values in Dataframe
             data.loc[data.index[row_index], 'SYMBOL'] = df_stock["SYMBOL"].iloc[-1]
@@ -154,22 +198,66 @@ def scanner(request):
             data.loc[data.index[row_index], 'COI'] = df_stock["COI_MA_COL"].iloc[-1]
             data.loc[data.index[row_index], 'PCR_T'] = df_stock["CUR_PCR_MA_COL"].iloc[-1]
             data.loc[data.index[row_index], 'PCR_VAL'] = df_stock["PCR_MA_COL"].iloc[-1]
-            data.loc[data.index[row_index], '10M_CE'] = df_stock["10M_CE"].iloc[-1]
-            data.loc[data.index[row_index], '10M_PE'] = df_stock["10M_PE"].iloc[-1]
-            data.loc[data.index[row_index], 'R_DIST'] = df_stock["R_DIST"].iloc[-1]
-            data.loc[data.index[row_index], 'S_DIST'] = df_stock["S_DIST"].iloc[-1]
+            data.loc[data.index[row_index], '10M_CE'] = CE_value
+            data.loc[data.index[row_index], '10M_CE_LTD'] = df_stock["10M_CE_LTD"].iloc[-1]
+            data.loc[data.index[row_index], '10M_PE'] = PE_value
+            data.loc[data.index[row_index], '10M_PE_LTD'] = df_stock["10M_PE_LTD"].iloc[-1]
+            data.loc[data.index[row_index], 'P_POS'] = df_stock["P_POS"].iloc[-1]
             row_index = row_index + 1
-            print(item)
+            # print(data)
+            df_stock.to_csv("scanner_test_data.csv")
         except Exception:
             pass
 
-    # print(data)
-    # data.to_csv("scanner.csv")
+    print(data)
+    data.to_csv("scanner.csv")
+    # try:
+    #     client_storage = storage.Client()
+    #     bucket = client_storage.bucket('biswasp87')
+    #     blob = bucket.blob('Scanner.csv')
+    #     blob.upload_from_string(data.to_csv(), 'text/csv')
+    # except Exception:
+    #     pass
+    # _________________________________________________________________________________
+    # UPLOAD DATA TO BIG QUERY
+    # _________________________________________________________________________________
+    client = bigquery.Client()
     try:
-        client_storage = storage.Client()
-        bucket = client_storage.bucket('biswasp87')
-        blob = bucket.blob('Scanner.csv')
-        blob.upload_from_string(data.to_csv(), 'text/csv')
-    except Exception:
-        pass
+        table_id = "phrasal-fire-373510.Scanner_Data.FNO_Scanner"
+        # project = "WRITE_APPEND"
+        project = "WRITE_TRUNCATE"
+        job_config = bigquery.LoadJobConfig(
+            # Specify a (partial) schema. All columns are always written to the
+            # table. The schema is used to assist in data type definitions.
+            # schema=[
+            #     bigquery.SchemaField("TIMESTAMP", "DATE", mode="REQUIRED"),
+            #     bigquery.SchemaField("EXPIRY_DT", "DATE", mode="REQUIRED"),
+            # ],
+            write_disposition=project, )
+        try:
+            client.get_table(table_id)  # Make an API request.
+            print("Table {} already exists.".format(table_id))
+            # Upload Current Dataframe
+            job = client.load_table_from_dataframe(data, table_id,
+                                                   job_config=job_config)  # Make an API request.
+            job.result()  # Wait for the job to complete.
+
+            table = client.get_table(table_id)  # Make an API request.
+            print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
+            print("Last Updated on: {}".format(table.modified))
+
+        except NotFound:
+            print("Table {} is not found. Proceed to create table".format(table_id))
+            client.create_table(table_id)  # API request
+            print(f"Created {table_id}.")
+            # Upload Current Dataframe
+            job = client.load_table_from_dataframe(data, table_id,
+                                                   job_config=job_config)  # Make an API request.
+            job.result()  # Wait for the job to complete.
+
+            table = client.get_table(table_id)  # Make an API request.
+            print("Loaded {} rows and {} columns to {}".format(table.num_rows, len(table.schema), table_id))
+            print("Last Updated on: {}".format(table.modified))
+    except Exception as e:
+        print(f"***** ERROR at fetching : {e} ****")  # Print the ERROR Message
     return ("Done!", 200)
