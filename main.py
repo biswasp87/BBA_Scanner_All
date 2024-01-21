@@ -11,8 +11,8 @@ def scanner(request):
                                  'P_POS'])
     FNO_WL = pd.read_csv("gs://bba_support_files/WL_FNO.csv")
     row_index = 0
-    # data['SYMBOL'] = FNO_WL['Symbol'].values
-    data['SYMBOL'] = ["TATAMOTORS", "AARTIIND", "ITC"]
+    data['SYMBOL'] = FNO_WL['Symbol'].values
+    # data['SYMBOL'] = ["TATAMOTORS", "AARTIIND", "ITC"]
 
     for item in data["SYMBOL"]:
         try:
