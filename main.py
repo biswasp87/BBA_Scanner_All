@@ -1,7 +1,6 @@
 def scanner(request):
     import numpy as np
     import pandas as pd
-    from google.cloud import storage
     from google.cloud import bigquery
     from google.cloud.exceptions import NotFound
 
@@ -11,8 +10,8 @@ def scanner(request):
                                  'P_POS'])
     FNO_WL = pd.read_csv("gs://bba_support_files/WL_FNO.csv")
     row_index = 0
-    data['SYMBOL'] = FNO_WL['Symbol'].values
-    # data['SYMBOL'] = ["TATAMOTORS", "AARTIIND", "ITC"]
+    # data['SYMBOL'] = FNO_WL['Symbol'].values
+    data['SYMBOL'] = ["TATAMOTORS", "AARTIIND"] # For Testing
 
     for item in data["SYMBOL"]:
         try:
@@ -47,7 +46,7 @@ def scanner(request):
             df_stock = df_stock.reset_index()
             df_stock["CUR_CE_STRIKE_PR_10MVOL"] = df_stock["CUR_CE_STRIKE_PR_10MVOL"].astype(str)
             df_stock["CUR_PE_STRIKE_PR_10MVOL"] = df_stock["CUR_PE_STRIKE_PR_10MVOL"].astype(str)
-            df_stock.to_csv("Sample_Data.csv")
+            # df_stock.to_csv("Sample_Data.csv")
             # print(df_stock)
 
             # NR4 INDICATOR___________________________________________________________
@@ -205,7 +204,7 @@ def scanner(request):
             data.loc[data.index[row_index], 'P_POS'] = df_stock["P_POS"].iloc[-1]
             row_index = row_index + 1
             # print(data)
-            df_stock.to_csv("scanner_test_data.csv")
+            # df_stock.to_csv("scanner_test_data.csv")
         except Exception:
             pass
 
@@ -225,8 +224,8 @@ def scanner(request):
     client = bigquery.Client()
     try:
         table_id = "phrasal-fire-373510.Scanner_Data.FNO_Scanner"
-        project = "WRITE_APPEND"
-        # project = "WRITE_TRUNCATE"
+        # project = "WRITE_APPEND"
+        project = "WRITE_TRUNCATE"
         job_config = bigquery.LoadJobConfig(
             # Specify a (partial) schema. All columns are always written to the
             # table. The schema is used to assist in data type definitions.
