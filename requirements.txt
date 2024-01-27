@@ -11,3 +11,4 @@ gcsfs
 requests
 fyers-apiv2
 pyotp
+db-dtypes
